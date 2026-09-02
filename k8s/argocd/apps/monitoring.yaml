@@ -1,0 +1,49 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: intelliops
+  sources:
+    # kube-prometheus-stack Helm chart with our values
+    - repoURL: https://prometheus-community.github.io/helm-charts
+      chart: kube-prometheus-stack
+      targetRevision: "61.3.2"
+      helm:
+        releaseName: kube-prometheus-stack
+        valueFiles:
+          - $values/k8s/monitoring/prometheus/values.yaml
+
+    # Our Git repo (source for valueFiles and extra manifests)
+    - repoURL: https://github.com/vsrujan/intelliops
+      targetRevision: main
+      ref: values
+
+    # ServiceMonitors + Grafana dashboard ConfigMap
+    - repoURL: https://github.com/vsrujan/intelliops
+      targetRevision: main
+      path: k8s/monitoring/prometheus
+
+    - repoURL: https://github.com/vsrujan/intelliops
+      targetRevision: main
+      path: k8s/monitoring/grafana
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 30s
+        maxDuration: 5m
+        factor: 2

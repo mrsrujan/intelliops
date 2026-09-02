@@ -1,0 +1,72 @@
+serviceAccount:
+  create: true
+  annotations:
+    # IRSA — replace with actual IAM role ARN after Terraform apply
+    eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/intelliops-dev-fluent-bit"
+
+config:
+  service: |
+    [SERVICE]
+        Flush         1
+        Daemon        Off
+        Log_Level     info
+        Parsers_File  /fluent-bit/etc/parsers.conf
+        HTTP_Server   On
+        HTTP_Listen   0.0.0.0
+        HTTP_Port     2020
+
+  inputs: |
+    [INPUT]
+        Name              tail
+        Tag               kube.*
+        Path              /var/log/containers/*.log
+        multiline.parser  docker, cri
+        DB                /var/log/flb_kube.db
+        Mem_Buf_Limit     5MB
+        Skip_Long_Lines   On
+        Refresh_Interval  10
+
+  filters: |
+    [FILTER]
+        Name                kubernetes
+        Match               kube.*
+        Kube_URL            https://kubernetes.default.svc:443
+        Kube_CA_File        /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        Kube_Token_File     /var/run/secrets/kubernetes.io/serviceaccount/token
+        Merge_Log           On
+        Keep_Log            Off
+        K8S-Logging.Parser  On
+        K8S-Logging.Exclude Off
+        Annotations         Off
+        Labels              On
+
+    [FILTER]
+        Name    grep
+        Match   kube.*
+        Regex   $kubernetes['namespace_name'] ^(apps|apps-dev|monitoring)$
+
+  outputs: |
+    [OUTPUT]
+        Name                  cloudwatch_logs
+        Match                 kube.*
+        region                us-east-1
+        log_group_name        /intelliops/dev
+        log_group_template    /intelliops/dev/$kubernetes['namespace_name']
+        log_stream_template   $kubernetes['pod_name']/$kubernetes['container_name']
+        auto_create_group     true
+        retry_limit           2
+
+tolerations:
+  - key: node-role.kubernetes.io/control-plane
+    operator: Exists
+    effect: NoSchedule
+  - key: CriticalAddonsOnly
+    operator: Exists
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 128Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi

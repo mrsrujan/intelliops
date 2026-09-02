@@ -1,0 +1,127 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: intelliops-overview-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  intelliops-overview.json: |
+    {
+      "title": "IntelliOps Overview",
+      "uid": "intelliops-overview",
+      "schemaVersion": 38,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "tags": ["intelliops"],
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "HTTP Request Rate (req/s)",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": { "unit": "reqps", "color": { "mode": "palette-classic" } },
+            "overrides": []
+          },
+          "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list" } },
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{namespace=~\"apps.*\"}[1m])) by (job)",
+              "legendFormat": "{{job}}"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "timeseries",
+          "title": "HTTP 5xx Error Rate (errors/s)",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": { "unit": "reqps", "color": { "mode": "fixed", "fixedColor": "red" } },
+            "overrides": []
+          },
+          "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list" } },
+          "targets": [
+            {
+              "expr": "sum(rate(http_requests_total{namespace=~\"apps.*\",status=~\"5..\"}[1m])) by (job)",
+              "legendFormat": "{{job}} 5xx"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "timeseries",
+          "title": "Pod CPU Usage (cores)",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": { "unit": "cores", "color": { "mode": "palette-classic" } },
+            "overrides": []
+          },
+          "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list" } },
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=~\"apps.*\",container!=\"\",container!=\"POD\"}[1m])) by (pod)",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "Pod Memory Usage (MB)",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": { "unit": "decmbytes", "color": { "mode": "palette-classic" } },
+            "overrides": []
+          },
+          "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list" } },
+          "targets": [
+            {
+              "expr": "sum(container_memory_working_set_bytes{namespace=~\"apps.*\",container!=\"\",container!=\"POD\"}) by (pod) / 1024 / 1024",
+              "legendFormat": "{{pod}}"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Total Pods Running",
+          "gridPos": { "h": 4, "w": 6, "x": 0, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": { "thresholds": { "mode": "absolute", "steps": [{"color": "red", "value": 0}, {"color": "green", "value": 1}] } },
+            "overrides": []
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "targets": [
+            {
+              "expr": "count(kube_pod_status_phase{namespace=~\"apps.*\",phase=\"Running\"})",
+              "legendFormat": "Running Pods"
+            }
+          ]
+        },
+        {
+          "id": 6,
+          "type": "stat",
+          "title": "Deployment Replicas Available",
+          "gridPos": { "h": 4, "w": 6, "x": 6, "y": 16 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "fieldConfig": {
+            "defaults": { "thresholds": { "mode": "absolute", "steps": [{"color": "red", "value": 0}, {"color": "green", "value": 2}] } },
+            "overrides": []
+          },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "targets": [
+            {
+              "expr": "sum(kube_deployment_status_replicas_available{namespace=~\"apps.*\"})",
+              "legendFormat": "Available Replicas"
+            }
+          ]
+        }
+      ]
+    }
