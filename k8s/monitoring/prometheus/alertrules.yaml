@@ -1,0 +1,71 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: intelliops-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: intelliops.apps
+      interval: 30s
+      rules:
+
+        - alert: HighCPUUsage
+          expr: |
+            sum(rate(container_cpu_usage_seconds_total{namespace=~"apps.*",container!="",container!="POD"}[5m]))
+              by (namespace, pod)
+            /
+            sum(kube_pod_container_resource_limits{namespace=~"apps.*",resource="cpu"})
+              by (namespace, pod)
+            > 0.85
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High CPU on {{ $labels.pod }}"
+            description: "{{ $labels.pod }} CPU > 85% for 2+ minutes"
+
+        - alert: MemoryOOMKilled
+          expr: |
+            kube_pod_container_status_last_terminated_reason{namespace=~"apps.*",reason="OOMKilled"} == 1
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "OOMKilled: {{ $labels.pod }}"
+            description: "{{ $labels.pod }} was OOMKilled in {{ $labels.namespace }}"
+
+        - alert: NodeNotReady
+          expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Node {{ $labels.node }} NotReady"
+            description: "Node {{ $labels.node }} not Ready for 1+ minute"
+
+        - alert: HighErrorRate
+          expr: |
+            sum(rate(http_requests_total{namespace=~"apps.*",status=~"5.."}[2m])) by (namespace, job)
+            /
+            (sum(rate(http_requests_total{namespace=~"apps.*"}[2m])) by (namespace, job) + 0.001)
+            > 0.05
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High 5xx rate: {{ $labels.job }}"
+            description: "Error rate > 5% for {{ $labels.job }}"
+
+        - alert: HighP95Latency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{namespace=~"apps.*"}[2m])) by (le, job)
+            ) > 1.0
+          for: 3m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High P95 latency: {{ $labels.job }}"
+            description: "P95 latency > 1s for {{ $labels.job }}"
